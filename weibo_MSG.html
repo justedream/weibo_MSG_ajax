@@ -1,0 +1,260 @@
+﻿<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>微博ajax接口</title>
+<link href="style/weibo.css" rel="stylesheet" type="text/css" />
+<script src="all_ajax.js"></script>
+<script src="cookie.js"></script>
+<script>
+
+function toDou(iNum){
+	return iNum<10?'0'+iNum:''+iNum;
+}
+
+function getCnTime(s){
+	var oDate = new Date(s*1000);
+	return oDate.getFullYear()+'年'+toDou(oDate.getMonth()+1)+'月'+toDou(oDate.getDate())+'日 '+toDou(oDate.getHours())+':'+toDou(oDate.getMinutes())+':'+toDou(oDate.getSeconds());
+}
+
+window.onload = function(){
+	var oTxt = document.getElementById('tijiaoText');
+	var oBtn = document.getElementById('send_btn');
+	var oMsgList = document.getElementById('msgList');
+	var oPage = document.getElementById('page');
+	var iNow = 1;
+	var URL = 'weibo.php';
+	oBtn.onclick=function(){
+		if(!oTxt.value)return;
+		ajax({
+			url:URL,
+			data:{
+				act:'add',
+				content:oTxt.value
+			},
+			success:function(str){
+				var json = eval('('+str+')');
+				if(!json.error){
+					var oDiv = createReply(json.id,oTxt.value,json.time,0,0);
+					if(oMsgList.children.length){
+						oMsgList.insertBefore(oDiv,oMsgList.children[0]);
+					}else{
+						oMsgList.appendChild(oDiv);
+					}
+
+					if(oMsgList.children.length>6){
+						oMsgList.removeChild(oMsgList.children[oMsgList.children.length-1]);
+					}
+
+					getPageCount();
+
+					oTxt.value='';
+				}else{
+					alert('留言失败');
+				}
+			},
+			error:function(err){
+				alert('失败:'+err);
+			}
+		});
+	};
+
+	//添加数据
+	function createReply(id,content,time,acc,ref){
+		var oDiv = document.createElement('div');
+		oDiv.className = 'reply';
+		oDiv.innerHTML='<p class="replyContent">'+content+'</p>'+
+			'<p class="operation">'+
+			'<span class="replyTime">'+getCnTime(time)+'</span>'+
+			'<span class="handle">'+
+			'<a href="javascript:;" class="top">'+acc+'</a>'+
+			'<a href="javascript:;" class="down_icon">'+ref+'</a>'+
+			'<a href="javascript:;" class="cut">删除</a>'+
+			'</span>'+
+			'</p>';
+
+		//顶某一条数据
+		var oAcc = oDiv.getElementsByTagName('a')[0];
+		oAcc.onclick = function(){
+			if(getCookie('acc'+id)){
+				alert('一条数据一天只能顶一次');
+				return;
+			}
+			ajax({
+				url:URL,
+				data:{
+					act:'acc',
+					id:id
+				},
+				success:function(str){
+					var json = eval('('+str+')');
+					if(!json.error){
+						setCookie('acc'+id,1,1);
+						alert('顶成功');
+						oAcc.innerHTML = parseInt(oAcc.innerHTML)+1;
+					}else{
+						alert('顶失败');
+					}
+				},
+				error:function(err){
+					alert('失败:'+err);
+				}
+			});
+		};
+		//踩某一条数据
+		var oRef = oDiv.getElementsByTagName('a')[1];
+		oRef.onclick = function(){
+			if(getCookie('ref'+id)){
+				alert('一条数据一天只能踩一次');
+				return;
+			}
+			ajax({
+				url:URL,
+				data:{
+					act:'ref',
+					id:id
+				},
+				success:function(str){
+					var json = eval('('+str+')');
+					if(!json.error){
+						setCookie('ref'+id,1,1);
+						alert('踩成功');
+						oRef.innerHTML = parseInt(oRef.innerHTML)+1;
+					}else{
+						alert('踩失败');
+					}
+				},
+				error:function(err){
+					alert('失败:'+err);
+				}
+			});
+		};
+		//删除某一条数据
+		var oDel = oDiv.getElementsByTagName('a')[2];
+		oDel.onclick = function(){
+			var result = confirm('您确定要删除这条数据吗？');
+			if(result){
+				ajax({
+					url:URL,
+					data:{
+						act:'del',
+						id:id
+					},
+					success:function(str){
+						var json = eval('('+str+')');
+						if(!json.error){
+							alert('删除成功');
+							getReply(iNow);
+							getPageCount();
+						}else{
+							alert('删除失败');
+						}
+					},
+					error:function(err){
+						alert('失败:'+err);
+					}
+				});
+			}
+		};
+
+		return oDiv;
+	}
+
+	//获取一页数据
+	function getReply(page){
+		ajax({
+			url:URL,
+			data:{
+				act:'get',
+				page:page
+			},
+			success:function(str){
+				var arr = eval('('+str+')');
+				oMsgList.innerHTML='';
+				for(var i=0;i<arr.length;i++){
+					var oDiv = createReply(arr[i].id,arr[i].content,arr[i].time,arr[i].acc,arr[i].ref);
+					oMsgList.appendChild(oDiv);
+				}
+			},
+			error:function(err){
+				alert('失败:'+err);
+			}
+		});
+	}
+	getReply(iNow);
+
+	//获取页面数字
+	function getPageCount(){
+		ajax({
+			url:URL,
+			data:{
+				act:'get_page_count'
+			},
+			success:function(str){
+				var json = eval('('+str+')');
+				oPage.innerHTML='';
+				for(var i=0;i<json.count;i++){
+					var oA = document.createElement('a');
+					oA.href='javascript:;';
+					oA.innerHTML = i+1;
+					oPage.appendChild(oA);
+
+					if(i==iNow-1){
+						oA.className='active';
+					}
+					oA.onclick=function(){
+						var aA = oPage.getElementsByTagName('a');
+						for(var i=0;i<aA.length;i++){
+							aA[i].className='';
+						}
+						this.className='active';
+						iNow = this.innerHTML;
+						getReply(iNow);
+					};
+				}
+			},
+			error:function(err){
+				alert('失败:'+err);
+			}
+		});
+	}
+	getPageCount();
+};
+</script>
+</head>
+
+<body>
+<div class="znsArea">
+<!--留言-->
+     <div class="takeComment">
+        <textarea name="textarea" class="takeTextField" id="tijiaoText"></textarea>
+        <div class="takeSbmComment">
+            <input type="button" class="inputs" value="" id="send_btn" />
+            <span>(可按 Enter 回复)</span>
+        </div>
+    </div>
+<!--已留-->
+    <div class="commentOn">
+        <div class="noContent" id="nc">暂无留言</div>
+        <div class="messList" id="msgList">
+        	<!--<div class="reply">
+                <p class="replyContent">和上海试试好的的二舅舅家让看看快快快我为何的话</p>
+                <p class="operation">
+                    <span class="replyTime">2011-09-08 16:37:60</span>
+                    <span class="handle">
+                    	<a href="javascript:;" class="top">0</a>
+                        <a href="javascript:;" class="down_icon">0</a>
+                        <a href="javascript:;" class="cut">删除</a>
+                    </span>
+                </p>
+            </div>-->
+        </div>
+        <div class="page" id="page">
+        	<!--<a href="javascript:;" class="active">1</a>
+        	<a href="javascript:;">2</a>
+        	<a href="javascript:;">3</a>-->
+        </div>
+    </div>
+</div>
+</body>
+</html>
